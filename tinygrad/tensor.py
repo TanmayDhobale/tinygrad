@@ -2045,7 +2045,7 @@ class Tensor(SimpleMathTrait):
   def _pool(self, k_:tuple[sint, ...], stride:Union[tuple[int, ...], int]=1, dilation:Union[tuple[int, ...], int]=1) -> Tensor:
     assert len(self.shape) >= len(k_), f"can't pool {self.shape} with {k_}"
     s_, d_ = make_tuple(stride, len(k_)), make_tuple(dilation, len(k_))
-    assert len(k_) == len(s_) == len(d_), f"stride/dilation mismatch kernel:{k_} stride:{s_} dilation:{d_}"
+    assert len(k_) == len(s_) == len(d_), f"stride/dilation mismatch kernel:{k_} stride:{s_} dilation:{d_"
     noop, i_ = [None] * (self.ndim-len(k_)), self.shape[-len(k_):]
     assert all(resolve(d*(k-1)+1 <= i) for k,d,i in zip(k_,d_,i_)), "kernel size cannot be greater than actual input size"
     o_ = [ceildiv(i-d*(k-1), s) for i,d,k,s in zip(i_,d_,k_,s_)]
@@ -3930,3 +3930,15 @@ if TRACEMETA >= 1:
   for name, fn in inspect.getmembers(Tensor, inspect.isfunction):
     if name in ["__class__", "__init__", "__new__", "__repr__", "backward", "sequential"]: continue
     setattr(Tensor, name, functools.wraps(fn)(_metadata_wrapper(fn)))
+
+class Tensor:
+    def __init__(self, uop: UOp):
+        self._uop = uop
+        
+    @property 
+    def uop(self) -> UOp:
+        return self._uop
+        
+    def _update_uop(self, new_uop: UOp, mapping: dict[UOp, UOp]):
+        """Update tensor's UOp while maintaining graph relationships"""
+        self._uop = mapping.get(self._uop, self._uop)

@@ -611,3 +611,20 @@ def create_schedule_with_vars(outs:list[UOp], skip_check:bool=not __debug__) -> 
   if len(schedule) != (groups:=len(prescheduled)): raise RuntimeError(f"cycle detected in graph, grouped {groups} but only scheduled {len(schedule)}")
   if DEBUG >= 1 and len(schedule) >= 10: print(f"scheduled {len(schedule)} kernels")
   return schedule, ctx.var_vals
+
+def create_schedule(tensors: List[Tensor]) -> List[ScheduleItem]:
+    # 1. Collect all tensors in the graph including children
+    tensor_graph = collect_tensor_graph(tensors)
+    
+    # 2. Apply rewrites while tracking UOp mappings
+    uop_mappings = {}
+    for tensor in tensor_graph:
+        new_uop, mapping = tensor.uop.transform(simplify_uop(tensor.uop))
+        uop_mappings.update(mapping)
+        
+    # 3. Update tensor UOps with new mappings
+    for tensor in tensor_graph:
+        tensor._update_uop(uop_mappings)
+        
+    # 4. Create schedule with immutable UOps and explicit buffers
+    return create_schedule_items(tensor_graph)

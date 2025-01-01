@@ -226,20 +226,28 @@ class UOpMetaClass(type):
     return created
 
 # some uops map to other stuff
-buffers:weakref.WeakKeyDictionary[UOp, Buffer] = weakref.WeakKeyDictionary() # this maps BUFFER uops to their device Buffers
 all_metadata:weakref.WeakKeyDictionary[UOp, Metadata] = weakref.WeakKeyDictionary()
 forced_realize:weakref.WeakSet[UOp] = weakref.WeakSet()
 
-becomes_map: weakref.WeakKeyDictionary[UOp, UOp] = weakref.WeakKeyDictionary()
+@dataclass(frozen=True)  # Make UOp immutable
+class UOp:
+    op: Ops
+    dtype: DType
+    src: tuple[UOp, ...] 
+    arg: Any = None
+    # Add explicit buffer reference
+    buffer: Optional[Buffer] = None
+    
+    # Replace mutable buffer assignment with new immutable UOp
+    def with_buffer(self, buf: Buffer) -> 'UOp':
+        return UOp(self.op, self.dtype, self.src, self.arg, buf)
 
-# NOTE: this should be frozen, but frozen is slower
-@dataclass(eq=False, slots=True)
-class UOp(MathTrait, metaclass=UOpMetaClass):
-  op:Ops
-  dtype:DType = dtypes.void
-  src:tuple[UOp, ...] = tuple()
-  arg:Any = None
-  children:set[weakref.ref[UOp]] = field(default_factory=set)
+    # Replace becomes_map with explicit transformation
+    def transform(self, new_op: 'UOp') -> tuple['UOp', dict[UOp, UOp]]:
+        """Returns new UOp and mapping of old->new UOps"""
+        mapping = {self: new_op}
+        return new_op, mapping
+
   def __del__(self):
     if self.op is Ops.BUFFER and (buffer:=buffers.get(self)) is not None: buffer.ref(-1)
     if (ref:=UOpMetaClass.ucache.get(k:=(self.op, self.dtype, self.src, self.arg))) is not None:
