@@ -3932,13 +3932,15 @@ if TRACEMETA >= 1:
     setattr(Tensor, name, functools.wraps(fn)(_metadata_wrapper(fn)))
 
 class Tensor:
-    def __init__(self, uop: UOp):
-        self._uop = uop
-        
-    @property 
-    def uop(self) -> UOp:
-        return self._uop
-        
-    def _update_uop(self, new_uop: UOp, mapping: dict[UOp, UOp]):
-        """Update tensor's UOp while maintaining graph relationships"""
-        self._uop = mapping.get(self._uop, self._uop)
+    def __init__(self, x, dtype=None, requires_grad=False):
+        if isinstance(x, UOp):
+            self._uop = x
+        else:
+            # Create initial UOp for data
+            self._uop = UOp(Ops.CONST, dtype or dtypes.float32, x, ())
+        self.requires_grad = requires_grad
+        all_tensors.add(weakref.ref(self))
+
+    def _replace_uop(self, new_uop: UOp):
+        """Replace UOp while maintaining immutability"""
+        self._uop = new_uop

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Optional, Union, Callable, cast, TYPE_CHECKING, Type, Literal, get_args
+from typing import Any, Optional, Union, Callable, cast, TYPE_CHECKING, Type, Literal, get_args, Tuple
 import sys, time, functools, itertools, math, operator, hashlib, os, types, pickle, pathlib, inspect, weakref
 from enum import auto, IntEnum, Enum
 from dataclasses import dataclass, field
@@ -233,20 +233,12 @@ forced_realize:weakref.WeakSet[UOp] = weakref.WeakSet()
 class UOp:
     op: Ops
     dtype: DType
-    src: tuple[UOp, ...] 
     arg: Any = None
-    # Add explicit buffer reference
-    buffer: Optional[Buffer] = None
+    src: Tuple[Any, ...] = ()
     
-    # Replace mutable buffer assignment with new immutable UOp
-    def with_buffer(self, buf: Buffer) -> 'UOp':
-        return UOp(self.op, self.dtype, self.src, self.arg, buf)
-
-    # Replace becomes_map with explicit transformation
-    def transform(self, new_op: 'UOp') -> tuple['UOp', dict[UOp, UOp]]:
-        """Returns new UOp and mapping of old->new UOps"""
-        mapping = {self: new_op}
-        return new_op, mapping
+    def replace(self, **kwargs) -> 'UOp':
+        """Create new UOp with updated fields"""
+        return dataclasses.replace(self, **kwargs)
 
   def __del__(self):
     if self.op is Ops.BUFFER and (buffer:=buffers.get(self)) is not None: buffer.ref(-1)
@@ -257,14 +249,6 @@ class UOp:
     args = [self.op, self.dtype, self.src, self.arg]
     if (_device_buffer:=self.realized) is not None and PICKLE_BUFFERS: args.extend([_device_buffer])
     return UOp, tuple(args)
-  def replace(self, **kwargs) -> UOp:
-    new_args = (kwargs.pop("op", self.op), kwargs.pop("dtype", self.dtype), kwargs.pop("src", self.src), kwargs.pop("arg", self.arg))
-    assert len(kwargs) == 0, f"unused kwargs in replace {list(kwargs)}"
-    if (self.op, self.dtype, self.src, self.arg) == new_args: return self
-    return UOp(*new_args)
-  @functools.cached_property
-  def key(self) -> bytes:
-    return hashlib.sha256(str((self.op, self.dtype, self.arg)).encode() + b"".join([s.key for s in self.src])).digest()
   def __repr__(self): return pretty_print(self, lambda x: f"{type(self).__name__}({x.op}, {x.dtype}, arg={x.argstr()}, src=(%s))")
   def argstr(self): return f'({", ".join(map(str, self.arg))})' if self.op is Ops.REDUCE_AXIS else repr(self.arg)
 

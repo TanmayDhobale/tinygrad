@@ -613,18 +613,25 @@ def create_schedule_with_vars(outs:list[UOp], skip_check:bool=not __debug__) -> 
   return schedule, ctx.var_vals
 
 def create_schedule(tensors: List[Tensor]) -> List[ScheduleItem]:
-    # 1. Collect all tensors in the graph including children
-    tensor_graph = collect_tensor_graph(tensors)
+    # Collect all tensors in the graph
+    tensor_graph = []
+    seen = set()
     
-    # 2. Apply rewrites while tracking UOp mappings
-    uop_mappings = {}
-    for tensor in tensor_graph:
-        new_uop, mapping = tensor.uop.transform(simplify_uop(tensor.uop))
-        uop_mappings.update(mapping)
-        
-    # 3. Update tensor UOps with new mappings
-    for tensor in tensor_graph:
-        tensor._update_uop(uop_mappings)
-        
-    # 4. Create schedule with immutable UOps and explicit buffers
-    return create_schedule_items(tensor_graph)
+    def collect(t):
+        if t not in seen:
+            seen.add(t)
+            tensor_graph.append(t)
+            for src in t._uop.src:
+                if isinstance(src, Tensor):
+                    collect(src)
+    
+    for t in tensors:
+        collect(t)
+    
+    # Create schedule items with immutable UOps
+    schedule_items = []
+    for t in tensor_graph:
+        if t._uop.op is Ops.SINK:
+            schedule_items.append(ScheduleItem(t._uop))
+            
+    return schedule_items

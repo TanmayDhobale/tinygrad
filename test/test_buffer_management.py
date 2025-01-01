@@ -4,13 +4,14 @@ from tinygrad.engine.schedule import create_schedule
 
 class TestBufferManagement(unittest.TestCase):
     def test_buffer_lifecycle(self):
-        # Create tensor and verify buffer creation
+        # Create tensor
         t1 = Tensor([1,2,3])
         t1.realize()
         
+        # Verify buffer exists
         self.assertIsNotNone(t1._uop.buffer)
         
-        # Create computation that should reuse buffer
+        # Create new tensor reusing buffer
         t2 = t1 + 1
         schedule = create_schedule([t2])
         
